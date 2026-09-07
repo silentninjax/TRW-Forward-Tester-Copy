@@ -114,6 +114,21 @@ def _run_async(coroutine):
     raise RuntimeError("Lighter order submission cannot run inside an active event loop.")
 
 
+def _serialize_lighter_response(value):
+    """Convert Lighter SDK response models into values PyMongo can encode."""
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        return {key: _serialize_lighter_response(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return tuple(_serialize_lighter_response(item) for item in value)
+    if hasattr(value, "to_dict"):
+        return _serialize_lighter_response(value.to_dict())
+    if hasattr(value, "to_json"):
+        return _serialize_lighter_response(json.loads(value.to_json()))
+    raise TypeError(f"Unsupported Lighter response value: {type(value).__name__}")
+
+
 async def _place_market_order(symbol, quantity, price, is_ask):
     profile = _lighter_profile()
     market = await _resolve_market_metadata(symbol, profile)
@@ -174,5 +189,6 @@ def place_order_lighter(symbol, qty, data):
     )
     if result[2] is not None:
         raise RuntimeError(f"Lighter order rejected: {result[2]}")
-    print(f"Order executed: REAL - {action} {qty} ({market} on {profile.name}) | {result}")
-    return result
+    serialized_result = _serialize_lighter_response(result)
+    print(f"Order executed: REAL - {action} {qty} ({market} on {profile.name}) | {serialized_result}")
+    return serialized_result

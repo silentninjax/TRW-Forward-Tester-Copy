@@ -1,8 +1,13 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from bson import BSON
 
-from exchanges.lighter import _market_metadata_cache, place_order_lighter
+from exchanges.lighter import (
+    _market_metadata_cache,
+    _serialize_lighter_response,
+    place_order_lighter,
+)
 
 
 @patch.dict(
@@ -110,3 +115,22 @@ def test_place_order_lighter_rejects_non_positive_price():
                 "1",
                 {"strategy": {"order_action": "BUY", "order_price": "0"}},
             )
+
+
+def test_serialize_lighter_response_converts_sdk_models_to_bson_safe_values():
+    class Transaction:
+        def to_json(self):
+            return '{"account_index": 42, "base_amount": 250}'
+
+    class Response:
+        def to_dict(self):
+            return {"code": 200, "tx_hash": "hash"}
+
+    result = _serialize_lighter_response((Transaction(), Response(), None))
+
+    assert result == (
+        {"account_index": 42, "base_amount": 250},
+        {"code": 200, "tx_hash": "hash"},
+        None,
+    )
+    BSON.encode({"order_response": result})
